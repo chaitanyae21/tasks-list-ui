@@ -19,14 +19,52 @@ function fetchLabels() {
 // TaskItem is a presentational component responsible for rendering a
 // single task. Separating this logic improves readability and makes it
 // easier to reason about the responsibilities of each piece of the UI.
+// Reusable Avatar component encapsulates rendering of an avatar image.
+function Avatar(props) {
+  const { src, alt } = props;
+  return React.createElement('img', { className: 'avatar', src, alt });
+}
+
+// Reusable LabelBadge component encapsulates label rendering so any
+// component can display a coloured label simply by passing a label
+// object containing `name` and `color`. This improves reusability.
+function LabelBadge(props) {
+  const { label } = props;
+  return React.createElement(
+    'span',
+    {
+      className: 'label',
+      style: { backgroundColor: label.color },
+    },
+    label.name
+  );
+}
+
+// StatusSelect is a reusable dropdown for selecting a status. It accepts
+// `value` and `onChange` props so that parent components can control
+// the selected state. This component centralises the status options
+// making it easier to update statuses in one place.
+function StatusSelect(props) {
+  const { value, onChange } = props;
+  return React.createElement(
+    'select',
+    {
+      value,
+      onChange: (e) => onChange(e.target.value),
+    },
+    React.createElement('option', { value: 'todo' }, 'To Do'),
+    React.createElement('option', { value: 'in-progress' }, 'In Progress'),
+    React.createElement('option', { value: 'done' }, 'Done')
+  );
+}
+
 function TaskItem(props) {
   const { task, assignee, labels, onStatusChange } = props;
   return React.createElement(
     'div',
     { className: 'task-item' },
-    // Avatar
-    React.createElement('img', {
-      className: 'avatar',
+    // Avatar component displays the user's avatar or a placeholder.
+    React.createElement(Avatar, {
       src: assignee?.avatar || 'https://via.placeholder.com/40',
       alt: assignee ? assignee.name : 'Assignee',
     }),
@@ -39,29 +77,18 @@ function TaskItem(props) {
         'div',
         { className: 'task-labels' },
         labels.map((label) =>
-          React.createElement(
-            'span',
-            {
-              key: label.id,
-              className: 'label',
-              style: { backgroundColor: label.color },
-            },
-            label.name
-          )
+          React.createElement(LabelBadge, {
+            key: label.id,
+            label,
+          })
         )
       )
     ),
-    // Status selector
-    React.createElement(
-      'select',
-      {
-        value: task.status,
-        onChange: (e) => onStatusChange(task.id, e.target.value),
-      },
-      React.createElement('option', { value: 'todo' }, 'To Do'),
-      React.createElement('option', { value: 'in-progress' }, 'In Progress'),
-      React.createElement('option', { value: 'done' }, 'Done')
-    )
+    // Reusable StatusSelect component
+    React.createElement(StatusSelect, {
+      value: task.status,
+      onChange: (value) => onStatusChange(task.id, value),
+    })
   );
 }
 
