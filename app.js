@@ -92,42 +92,66 @@ function TaskItem(props) {
   );
 }
 
-// TaskList component displays a list of tasks with assignee avatars,
-// labels, and a status dropdown. This version decomposes the list into
-// smaller pieces (TaskItem) for clarity. This component is written
-// without JSX to avoid the need for a build step.
-function TaskList() {
+/*
+ * useTasksData is a custom hook that encapsulates data loading and state
+ * management for tasks, assignees and labels. By moving this logic
+ * out of the rendering layer, we make the TaskList component easier
+ * to test and extend. This pattern is commonly used by senior
+ * developers to separate concerns.
+ */
+function useTasksData() {
   const [tasks, setTasks] = React.useState([]);
   const [assignees, setAssignees] = React.useState([]);
   const [labels, setLabels] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
 
-  // Load data on mount.
   React.useEffect(() => {
+    let cancelled = false;
     async function load() {
       const [ts, as, ls] = await Promise.all([fetchTasks(), fetchAssignees(), fetchLabels()]);
-      setTasks(ts);
-      setAssignees(as);
-      setLabels(ls);
-      setLoading(false);
+      if (!cancelled) {
+        setTasks(ts);
+        setAssignees(as);
+        setLabels(ls);
+        setLoading(false);
+      }
     }
     load();
+    // Cleanup in case component unmounts during load
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Update a task's status immutably. Avoiding mutation ensures
-  // predictable state updates and enables future optimisations.
-  function updateStatus(taskId, newStatus) {
+  // Status update callback memoised with useCallback. This prevents
+  // unnecessary re-renders in deeply nested component trees.
+  const updateStatus = React.useCallback((taskId, newStatus) => {
     setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t)));
+  }, []);
+
+  const getAssignee = React.useCallback((id) => assignees.find((a) => a.id === id), [assignees]);
+  const getLabels = React.useCallback((ids) => labels.filter((l) => ids.includes(l.id)), [labels]);
+
+  return { tasks, assignees, labels, loading, updateStatus, getAssignee, getLabels };
+}
+
+// Context for sharing tasks data throughout the component tree. This
+// allows deeply nested components to access data without prop-drilling.
+const TasksContext = React.createContext(null);
+
+// TaskList component renders the list of tasks by consuming the
+// TasksContext. It expects a provider up the tree (App) to supply
+// the tasks data and update function. This separation improves
+// composability and testability.
+function TaskList() {
+  const context = React.useContext(TasksContext);
+  if (!context) {
+    return React.createElement('p', null, 'No tasks context available');
   }
-
-  // Lookup helpers memoised to avoid unnecessary recomputations on each render.
-  const getAssignee = (id) => assignees.find((a) => a.id === id);
-  const getLabels = (ids) => labels.filter((l) => ids.includes(l.id));
-
+  const { tasks, loading, updateStatus, getAssignee, getLabels } = context;
   if (loading) {
     return React.createElement('p', null, 'Loading tasks...');
   }
-
   return React.createElement(
     'div',
     { className: 'task-list' },
@@ -146,7 +170,17 @@ function TaskList() {
 // Root App component acts as a wrapper. Additional pages or features could be
 // composed here in the future.
 function App() {
-  return React.createElement(TaskList, null);
+  // Acquire tasks data via custom hook. This hook handles data
+  // loading and returns memoised callbacks for updating tasks.
+  const tasksData = useTasksData();
+  // Provide the tasks context to descendants. Wrapping the list in
+  // TasksContext.Provider prevents prop drilling and enables
+  // consumption of tasks data from any level of the tree.
+  return React.createElement(
+    TasksContext.Provider,
+    { value: tasksData },
+    React.createElement(TaskList, null)
+  );
 }
 
 // Mount the app once React and ReactDOM have loaded. This helper waits
