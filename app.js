@@ -58,6 +58,46 @@ function StatusSelect(props) {
   );
 }
 
+// SearchBar component provides a simple input to filter tasks by title.
+// It receives the current search value and a callback to update it.
+function SearchBar(props) {
+  const { value, onChange } = props;
+  return React.createElement(
+    'input',
+    {
+      className: 'search-bar',
+      type: 'text',
+      placeholder: 'Search tasks...',
+      value,
+      onChange: (e) => onChange(e.target.value),
+    }
+  );
+}
+
+// ErrorBoundary is a class component that catches rendering errors
+// in its child subtree. In a production-grade app you would log
+// these errors to an external service. Here we simply display a
+// message to the user.
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error, info) {
+    // In a real app, you might log the error to an external service.
+    console.error('ErrorBoundary caught an error', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return React.createElement('p', { className: 'error' }, 'Something went wrong. Please try again later.');
+    }
+    return this.props.children;
+  }
+}
+
 function TaskItem(props) {
   const { task, assignee, labels, onStatusChange } = props;
   return React.createElement(
@@ -149,13 +189,24 @@ function TaskList() {
     return React.createElement('p', null, 'No tasks context available');
   }
   const { tasks, loading, updateStatus, getAssignee, getLabels } = context;
+  // Local state for search filtering. Controlled via SearchBar.
+  const [searchTerm, setSearchTerm] = React.useState('');
   if (loading) {
     return React.createElement('p', null, 'Loading tasks...');
   }
+  // Filter tasks based on the search term (case-insensitive).
+  const filteredTasks = tasks.filter((t) =>
+    t.title.toLowerCase().includes(searchTerm.toLowerCase())
+  );
   return React.createElement(
     'div',
     { className: 'task-list' },
-    tasks.map((task) =>
+    // Search bar at top
+    React.createElement(SearchBar, {
+      value: searchTerm,
+      onChange: setSearchTerm,
+    }),
+    filteredTasks.map((task) =>
       React.createElement(TaskItem, {
         key: task.id,
         task,
@@ -177,9 +228,13 @@ function App() {
   // TasksContext.Provider prevents prop drilling and enables
   // consumption of tasks data from any level of the tree.
   return React.createElement(
-    TasksContext.Provider,
-    { value: tasksData },
-    React.createElement(TaskList, null)
+    ErrorBoundary,
+    null,
+    React.createElement(
+      TasksContext.Provider,
+      { value: tasksData },
+      React.createElement(TaskList, null)
+    )
   );
 }
 
